@@ -1,4 +1,4 @@
-"# Computer-Organization-and-Architecture" 
+# Computer-Organization-and-Architecture
 
 **C/C++ Projects on recreating the Computer Architecture**
 

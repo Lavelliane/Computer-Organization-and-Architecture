@@ -22,13 +22,24 @@ unsigned char twosComp(unsigned char data);
 bool detectCarry(unsigned char x, unsigned char y);
 bool isNegative(unsigned char x);
 void setFlags(unsigned char ACC);
-void booths(unsigned char q, unsigned char m);
-void displayCycle(unsigned char acc, unsigned char q, unsigned char q_prev, unsigned char m, int num_bits);
+void booths(int a, int b);
+void displayCycle(unsigned char acc, unsigned char q, unsigned char q_prev, unsigned char m);
 int* charToBinary(unsigned char num);
 void setToMemory(int* binary, int col, int row, short int cs);
 void setBit(long* num, int pos, int value);
 unsigned char reconstruct(int col, int row, int cs);
-int count_bits(unsigned char x);
+int count_bits(unsigned int x);
+
+
+/*booths vars*/
+int booth[16]={0},M[8]={0},M_[8]={0},q=0;
+void multiplicand(int);
+void multiplier(int);
+void add(int m[8]);
+void arithmeticShiftRight();
+void neg();
+int dec();
+/* booth vars end */
 
 unsigned char dataMemory[2048]; // 2048 = 2^11 (where 11 is number of address bits)
 unsigned char ioBuffer[32];
@@ -750,11 +761,10 @@ int ALU(void){
 			break;
 		case 0x1B:
 			temp_OP2 = BUS;
-			booths(ACC, temp_OP2);
-			//printf("%d %d", ACC, temp_OP2);
+			booths((int)ACC, (int)temp_OP2);
 			temp_ACC = (int) ACC * temp_OP2;
 			ACC = temp_ACC;
-			printf("ACC: ");
+			printf("ACC = ");
 			decToBinary(ACC, 16);
 			printf("\n");
 			setFlags((unsigned char)ACC);
@@ -909,59 +919,38 @@ void displayALU(unsigned char temp_ACC, unsigned char temp_OP2, unsigned char co
 		default:
 			printf("Invalid Control Signal");
 			break;
-		
 	}
 }
-void booths(unsigned char q, unsigned char m) {
-    // Determine the number of bits in the operands
-    int num_bits = sizeof(unsigned char) * 8;
-	int i;
-    // Initialize the accumulator and the multiplier
-    unsigned char acc = 0;
-    unsigned char multiplier = q;
-
-    // Initialize the multiplicand in 2's complement representation
-    unsigned char multiplicand = m;
-
-    // Initialize the extra bit to 0
-    unsigned char extra_bit = 0;
-
-    // Print the table header
-    printf("ACC\tQ\tQ'\tM\n");
-
-    // Perform Booth's algorithm
-    for (i = 0; i < num_bits; i++) {
-        // Extract the lsb of the multiplier and the msb of the extra bit
-        unsigned char q_lsb = multiplier & 0b1;
-        unsigned char extra_msb = (extra_bit & (1 << (num_bits - 1))) ? 1 : 0;
-
-        // Shift the extra bit and the multiplier to the right
-        extra_bit >>= 1;
-        multiplier >>= 1;
-
-        // Combine the last two bits of the multiplier and the extra bit
-        unsigned char last_two_bits = (extra_msb << 1) | q_lsb;
-
-        // Determine the operation based on the last two bits
-        if (last_two_bits == 0b01) {
-            acc += multiplicand;
-            extra_bit |= 0b10000000;
-        }
-        else if (last_two_bits == 0b10) {
-            acc -= multiplicand;
-            extra_bit &= 0b01111111;
-        }
-
-        // Shift the accumulator and the extra bit to the right
-        extra_bit |= (acc & 0b1) << (num_bits - 1);
-        acc >>= 1;
-
-        // Print the current step in the calculation
-        displayCycle(acc, multiplier, extra_bit, multiplicand, num_bits);
-    }
+void booths(int a, int b){
+   int n=8,i,sum=0;
+   multiplicand(a);
+   multiplier(b);
+	neg();
+	printf("ACC\t\tQ\t\tQ_prev\t\tM\n");
+	while(n>0){
+		if(booth[15]==0&&q==1){
+			add(M); //AC=AC+M
+		}else if(booth[15]==1&&q==0){
+			add(M_); //AC=AC-M
+		}
+		arithmeticShiftRight();
+		for(i = 0; i < 8; i++){
+			printf("%d", booth[i]);
+		}
+		printf("\t");
+		for(i = 8; i < 16; i++){
+			printf("%d", booth[i]);
+		}
+		printf("\t");
+		printf("%d", q);
+		printf("\t\t");
+		decToBinary((unsigned int)a, 8);
+		printf("\n");
+		n--;
+	}
+	return;
 }
-
-int count_bits(unsigned char x) {
+int count_bits(unsigned int x) {
     int count = 0;
     while (x) {
         count++;
@@ -969,15 +958,15 @@ int count_bits(unsigned char x) {
     }
     return count;
 }
-void displayCycle(unsigned char acc, unsigned char q, unsigned char q_prev, unsigned char m, int num_bits){
+void displayCycle(unsigned char acc, unsigned char q, unsigned char q_prev, unsigned char m){
 	
-	decToBinary(acc, num_bits);
+	decToBinary(acc, 8);
 	printf("\t");
-	decToBinary(q, num_bits);
+	decToBinary(q, 8);
 	printf("\t");
-	decToBinary(q_prev, num_bits);
+	decToBinary(q_prev, 8);
 	printf("\t");
-	decToBinary(m, num_bits);
+	decToBinary(m, 8);
 	printf("\n");
 	
 }
@@ -995,4 +984,122 @@ void decToBinary(unsigned int n, int bits)
 	    num = num << 1;
 	}
 }
+/*BOOTH UTIL FUNCTIONS BEGIN HERE  */
 
+/* Converts multiplier to binary and adds in booth array as Q*/
+void multiplier(int a){
+	if(a>=0){
+		int i=15;
+		while(a>0){
+			int rem=a%2;
+			a=a/2;
+			booth[i]=rem;
+			i--;
+		}
+	}else{
+		a=a+128;
+		int i=15;
+		while(a>0){
+			int rem=a%2;
+			a=a/2;
+			booth[i]=rem;
+			i--;
+		}
+		booth[8]=1;
+	}
+	
+}
+
+/*Converts multiplicand to binary*/
+void multiplicand(int a){
+	if(a>=0){
+		int i=7;
+		while(a>0){
+			int rem=a%2;
+			a=a/2;
+			M[i]=rem;
+			i--;
+		}
+	}else{
+		a=a+128;
+		int i=7;
+		while(a>0){
+			int rem=a%2;
+			a=a/2;
+			M[i]=rem;
+			i--;
+		}
+		M[0]=1;
+	}
+	
+}
+
+/*ADDS M or -M to AC*/
+void add(int m[8]){
+	int sum=0,carry=0,i;
+	for(i=7;i>=0;i--){
+		sum=m[i]+booth[i]+carry;
+		if(sum==2){
+			sum=0;
+			carry=1;
+		}else if(sum==3){
+			sum=1;
+			carry=1;
+		}else{
+			carry=0;
+		}
+		booth[i]=sum;
+	}	
+}
+
+/* neg() creates -M from M */
+void neg(){
+	int i,carry=0,sum=0;
+	for(i=0;i<8;i++){
+		if(M[i]==0){
+			M_[i]=1;
+		}else{
+			M_[i]=0;
+		}
+	}
+	sum=1+M_[7];
+	if(sum==2){
+		carry=1;
+		sum=0;
+	}
+	M_[7]=sum;
+	for(i=6;i>=0;i--){
+		sum=M_[i]+carry;
+		if(sum==2){
+			carry=1;
+			sum=0;
+		}else{
+			carry=0;
+		}
+		M_[i]=sum;
+	}
+	
+}
+
+void arithmeticShiftRight(){
+	int i=0;
+	q=booth[15];
+	for(i=15;i>0;i--){
+		booth[i]=booth[i-1];
+	}	
+}
+
+int dec()
+{
+	int result=0,i=15,b=0;
+	while(i>0&&b<15)
+	{
+		result+=(booth[i]*pow(2,b));
+		b++,i--;
+	}
+	if(booth[0]==1)
+		return (-32768+result);
+	else
+		return result;
+}
+/* BOOTH UTIL ENDS */
